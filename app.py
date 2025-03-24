@@ -5,11 +5,11 @@ from io import StringIO
 import datetime
 import plotly.express as px
 
-# Streamlit layout
+# Set up Streamlit UI
 st.set_page_config(page_title="Construction Planner AI", layout="centered")
 st.title("🏗️ AI Construction Planner")
 
-# 📁 Upload or 📝 Paste
+# File upload or manual text input
 uploaded_file = st.file_uploader("📁 Upload a .txt project description", type=["txt"])
 manual_input = st.text_area("📝 Or paste your meeting notes / scope here", height=200)
 
@@ -21,14 +21,13 @@ if uploaded_file:
 elif manual_input:
     input_text = manual_input
 
-# Only run logic if input exists
+# Continue only if we have text
 if input_text:
     tasks = extract_tasks_from_text(input_text)
     df = pd.DataFrame(tasks)
 
     st.subheader("📋 Extracted Task List")
 
-    # Helpers
     def parse_date(text):
         try:
             return datetime.datetime.strptime(text, "%B %d")
@@ -42,7 +41,7 @@ if input_text:
         except:
             return datetime.timedelta(days=0)
 
-    # Auto-infer missing start/end dates
+    # Auto-infer start & end dates with safety check
     start_dates = []
     end_dates = []
 
@@ -50,23 +49,20 @@ if input_text:
         start_dt = parse_date(row["start_date"]) if row["start_date"] else None
         duration = parse_duration(row["duration"]) if row["duration"] else datetime.timedelta(days=0)
 
-        # ⏳ Infer start if missing and depends on previous
         if not start_dt and row["depends_on"] == "Previous task" and i > 0:
-            start_dt = end_dates[i - 1] + datetime.timedelta(days=1)
+            prev_end = end_dates[i - 1]
+            if prev_end:  # Only infer if previous task has valid end date
+                start_dt = prev_end + datetime.timedelta(days=1)
 
         end_dt = start_dt + duration if start_dt else None
         start_dates.append(start_dt)
         end_dates.append(end_dt)
 
-    # Add inferred dates to the DataFrame for display
     df["Auto Start"] = [dt.strftime("%b %d") if dt else "" for dt in start_dates]
     df["Auto End"] = [dt.strftime("%b %d") if dt else "" for dt in end_dates]
-
     st.dataframe(df)
 
-    # -------------------------
     # ⚠️ Conflict Detector
-    # -------------------------
     st.subheader("⚠️ Conflict Detector")
     issues = []
 
@@ -86,9 +82,7 @@ if input_text:
     else:
         st.success("✅ No conflicts detected!")
 
-    # -------------------------
     # 📊 Gantt Chart View
-    # -------------------------
     st.subheader("📊 Visual Gantt Chart")
 
     gantt_data = []
@@ -110,9 +104,7 @@ if input_text:
     else:
         st.info("Not enough data to display Gantt chart.")
 
-    # -------------------------
-    # 📤 Export to Excel
-    # -------------------------
+    # 📤 Excel Export
     st.subheader("📤 Export")
     if st.button("Download Excel File"):
         export_df = df.copy()
